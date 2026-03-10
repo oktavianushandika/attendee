@@ -166,9 +166,14 @@ class ConversationManager:
         Process an utterance from closed captions.
         
         Args:
-            utterance: Dictionary with keys: 'text', 'participant_id', 'participant_name'
+            utterance: Dictionary with keys: 'text', 'participant_id', 'participant_name', 'is_bot'
         """
         if not self.enabled:
+            return
+        
+        # Ignore captions produced by the bot itself to avoid feedback loops
+        if utterance.get("is_bot"):
+            logger.debug("Ignoring utterance from the bot itself")
             return
         
         if not self.llm_client.is_configured() or not self.tts_client.is_configured():

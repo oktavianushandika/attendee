@@ -1344,6 +1344,7 @@ class BotController:
             "text": message["text"],
             "participant_id": message["participant_uuid"],
             "participant_name": message["participant_full_name"],
+            "is_bot": message["participant_is_the_bot"],
         })
 
     def process_individual_audio_chunk(self, message):
