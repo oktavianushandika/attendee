@@ -2,7 +2,7 @@ services:
   attendee-worker-local:
     build: ./
     volumes:
-     - .:/attendee
+      - .:/attendee
     networks:
       - attendee_network
     environment:
@@ -10,25 +10,33 @@ services:
       - REDIS_URL=redis://redis:6379/5
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
       - ENABLE_CHROME_SANDBOX=false
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin123
+      - AWS_RECORDING_STORAGE_BUCKET_NAME=attendee-development-bucket
     command: "celery -A attendee worker -l INFO"
 
   attendee-scheduler-local:
     build: ./
     volumes:
-     - .:/attendee
+      - .:/attendee
     networks:
       - attendee_network
     environment:
       - POSTGRES_HOST=postgres
       - REDIS_URL=redis://redis:6379/5
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin123
+      - AWS_RECORDING_STORAGE_BUCKET_NAME=attendee-development-bucket
     command: "python manage.py run_scheduler"
     entrypoint: []
 
   attendee-app-local:
     build: ./
     volumes:
-     - .:/attendee
+      - .:/attendee
     networks:
       - attendee_network
     ports:
@@ -37,13 +45,17 @@ services:
       - POSTGRES_HOST=postgres
       - REDIS_URL=redis://redis:6379/5
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin123
+      - AWS_RECORDING_STORAGE_BUCKET_NAME=attendee-development-bucket
     command: python manage.py runserver 0.0.0.0:8000
     entrypoint: []
 
   attendee-webpage-streamer-local:
     build: ./
     volumes:
-     - .:/attendee
+      - .:/attendee
     networks:
       - attendee_network
     ports:
@@ -57,7 +69,6 @@ services:
     profiles:
       - webpage-streamer
 
-
   postgres:
     image: postgres:15.3-alpine
     environment:
@@ -66,11 +77,24 @@ services:
       POSTGRES_PASSWORD: attendee_development_user
       PGDATA: /data/postgres
     volumes:
-       - postgres:/data/postgres
+      - postgres:/data/postgres
     networks:
       - attendee_network
     restart: unless-stopped
 
+  minio:
+    image: minio/minio
+    networks:
+      - attendee_network
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
 
   redis:
     image: redis:7-alpine
@@ -87,3 +111,4 @@ networks:
 volumes:
   postgres:
   redis:
+  minio_data:
