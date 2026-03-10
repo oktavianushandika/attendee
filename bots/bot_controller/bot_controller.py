@@ -67,11 +67,14 @@ from .audio_output_manager import AudioOutputManager
 from .azure_file_uploader import AzureFileUploader
 from .bot_resource_snapshot_taker import BotResourceSnapshotTaker
 from .closed_caption_manager import ClosedCaptionManager
+from .conversation_manager import ConversationManager
 from .grouped_closed_caption_manager import GroupedClosedCaptionManager
 from .gstreamer_pipeline import GstreamerPipeline
+from .llm_client import LLMClient
 from .per_participant_non_streaming_audio_input_manager import PerParticipantNonStreamingAudioInputManager
 from .per_participant_streaming_audio_input_manager import PerParticipantStreamingAudioInputManager
 from .pipeline_configuration import PipelineConfiguration
+from .prosa_tts_client import ProsaTTSClient
 from .realtime_audio_output_manager import RealtimeAudioOutputManager
 from .rtmp_client import RTMPClient
 from .s3_file_uploader import S3FileUploader
@@ -793,6 +796,16 @@ class BotController:
                 get_participant_callback=self.get_participant,
             )
 
+        # Initialize conversation system
+        self.llm_client = LLMClient()
+        self.prosa_tts_client = ProsaTTSClient()
+        self.conversation_manager = ConversationManager(
+            llm_client=self.llm_client,
+            tts_client=self.prosa_tts_client,
+            play_audio_callback=self.play_conversation_audio,
+            get_participant_callback=self.get_participant,
+        )
+
         self.rtmp_client = None
         if self.pipeline_configuration.rtmp_stream_audio or self.pipeline_configuration.rtmp_stream_video:
             self.rtmp_client = RTMPClient(rtmp_url=self.bot_in_db.rtmp_destination_url())
@@ -964,6 +977,24 @@ class BotController:
 
     def get_participant(self, participant_id):
         return self.adapter.get_participant(participant_id)
+
+    def play_conversation_audio(self, audio_bytes):
+        """
+        Play conversation response audio through the bot's virtual microphone.
+        Converts MP3 to PCM and sends to adapter.
+        """
+        from bots.utils import mp3_to_pcm
+        
+        try:
+            logger.info(f"Converting MP3 to PCM for conversation audio ({len(audio_bytes)} bytes)")
+            # Convert MP3 to PCM (16kHz as specified in TTS config)
+            pcm_audio = mp3_to_pcm(audio_bytes, sample_rate=16000)
+            logger.info(f"Converted to PCM ({len(pcm_audio)} bytes), sending to adapter")
+            # Send to adapter
+            self.adapter.send_raw_audio(pcm_audio, sample_rate=16000)
+            logger.info("Conversation audio sent successfully")
+        except Exception as e:
+            logger.error(f"Error playing conversation audio: {e}", exc_info=True)
 
     def currently_playing_audio_media_request_finished(self, audio_media_request):
         logger.info("currently_playing_audio_media_request_finished called")
@@ -1307,6 +1338,13 @@ class BotController:
         )
 
         RecordingManager.set_recording_transcription_in_progress(recording_in_progress)
+
+        # Process utterance for conversation system
+        self.conversation_manager.process_utterance({
+            "text": message["text"],
+            "participant_id": message["participant_uuid"],
+            "participant_name": message["participant_full_name"],
+        })
 
     def process_individual_audio_chunk(self, message):
         logger.info("Received message that new individual audio chunk was detected")
