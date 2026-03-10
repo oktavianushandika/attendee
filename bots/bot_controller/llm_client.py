@@ -57,7 +57,8 @@ class LLMClient:
             form_data = {
                 "chatbot_id": self.chatbot_id,
                 "message": query,
-                "conversation_id": self.agent_id
+                "conversation_id": self.agent_id,
+                "model_name": "GPT 5 Mini"
             }
             
             # Prepare headers

@@ -254,23 +254,23 @@ class ConversationManager:
             # For now, skip LLM and pass query directly to TTS for testing
             
             # Step 1: Get LLM response (TEMPORARILY DISABLED)
-            # logger.info(f"Sending query to LLM: {query}")
-            # llm_response = self.llm_client.get_response(query)
-            # 
-            # if not llm_response:
-            #     logger.error("Failed to get LLM response")
-            #     return
-            # 
-            # logger.info(f"LLM response: {llm_response[:100]}...")
+            logger.info(f"Sending query to LLM: {query}")
+            llm_response = self.llm_client.get_response(query)
+            
+            if not llm_response:
+                logger.error("Failed to get LLM response")
+                return
+            
+            logger.info(f"LLM response: {llm_response[:100]}...")
             
             # TEMPORARY: Use query directly as the text to speak
-            logger.info("TEMPORARY MODE: Skipping LLM, using query directly for TTS")
-            logger.info(f"Query to speak: {query}")
-            text_to_speak = "Lorem Ipsum adalah contoh teks atau dummy dalam industri percetakan dan penataan huruf atau typesetting. Lorem Ipsum telah menjadi standar contoh teks sejak tahun 1500an, saat seorang tukang cetak yang tidak dikenal mengambil sebuah kumpulan teks dan mengacaknya untuk menjadi sebuah buku contoh huruf."
+            # logger.info("TEMPORARY MODE: Skipping LLM, using query directly for TTS")
+            # logger.info(f"Query to speak: {query}")
+            # text_to_speak = "Lorem Ipsum adalah contoh teks atau dummy dalam industri percetakan dan penataan huruf atau typesetting. Lorem Ipsum telah menjadi standar contoh teks sejak tahun 1500an, saat seorang tukang cetak yang tidak dikenal mengambil sebuah kumpulan teks dan mengacaknya untuk menjadi sebuah buku contoh huruf."
             
             # Step 2: Split text into sentences
             logger.info("Splitting response into sentences...")
-            sentences = self.tts_client.split_into_sentences(text_to_speak)
+            sentences = self.tts_client.split_into_sentences(llm_response)
             logger.info("Split into %d sentences", len(sentences))
             
             # Step 3: Process and play each sentence
