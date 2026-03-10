@@ -261,23 +261,31 @@ class ConversationManager:
             # TEMPORARY: Use query directly as the text to speak
             logger.info("TEMPORARY MODE: Skipping LLM, using query directly for TTS")
             logger.info(f"Query to speak: {query}")
-            text_to_speak = query
+            text_to_speak = "Lorem Ipsum adalah contoh teks atau dummy dalam industri percetakan dan penataan huruf atau typesetting. Lorem Ipsum telah menjadi standar contoh teks sejak tahun 1500an, saat seorang tukang cetak yang tidak dikenal mengambil sebuah kumpulan teks dan mengacaknya untuk menjadi sebuah buku contoh huruf."
             
-            # Step 2: Convert to speech
-            logger.info("Converting text to speech...")
-            audio_bytes = self.tts_client.synthesize_speech(text_to_speak)
+            # Step 2: Split text into sentences
+            logger.info("Splitting response into sentences...")
+            sentences = self.tts_client.split_into_sentences(text_to_speak)
+            logger.info("Split into %d sentences", len(sentences))
             
-            if not audio_bytes:
-                logger.error("Failed to synthesize speech")
-                return
+            # Step 3: Process and play each sentence
+            for i, sentence in enumerate(sentences, 1):
+                logger.info("Processing sentence %d/%d: %s...", i, len(sentences), sentence[:50])
+                
+                # Convert sentence to speech (synchronous)
+                audio_bytes = self.tts_client.synthesize_speech_sync(sentence)
+                
+                if not audio_bytes:
+                    logger.error("Failed to synthesize sentence %d, skipping", i)
+                    continue
+                
+                logger.info("Sentence %d synthesized, size: %d bytes", i, len(audio_bytes))
+                
+                # Play audio immediately
+                logger.info("Playing sentence %d audio...", i)
+                self.play_audio_callback(audio_bytes)
             
-            logger.info(f"Speech synthesized, size: {len(audio_bytes)} bytes")
-            
-            # Step 3: Play audio
-            logger.info("Playing audio response...")
-            self.play_audio_callback(audio_bytes)
-            
-            logger.info("Conversation response completed successfully")
+            logger.info("Conversation response completed successfully - played %d sentences", len(sentences))
             
         except Exception as e:
             logger.error(f"Error processing conversation query: {e}", exc_info=True)

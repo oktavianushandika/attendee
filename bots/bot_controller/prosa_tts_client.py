@@ -32,6 +32,32 @@ class ProsaTTSClient:
         """Check if TTS client is properly configured"""
         return bool(self.base_url and self.api_key)
     
+    @staticmethod
+    def split_into_sentences(text: str) -> list:
+        """
+        Split text into sentences based on period punctuation.
+        
+        Args:
+            text: The text to split
+            
+        Returns:
+            List of sentences
+        """
+        import re
+        
+        # Split by period followed by space or end of string
+        # This handles: "Sentence one. Sentence two."
+        sentences = re.split(r'\.(?:\s+|$)', text)
+        
+        # Filter out empty strings and add periods back
+        sentences = [s.strip() + '.' for s in sentences if s.strip()]
+        
+        # Remove trailing period from last sentence if text didn't end with period
+        if sentences and not text.rstrip().endswith('.'):
+            sentences[-1] = sentences[-1][:-1]
+        
+        return sentences
+    
     def synthesize_speech(self, text: str) -> Optional[bytes]:
         """
         Convert text to speech and return audio bytes.
@@ -67,6 +93,73 @@ class ProsaTTSClient:
             
         except Exception as e:
             logger.error(f"Unexpected error in TTS synthesis: {e}")
+            return None
+    
+    def synthesize_speech_sync(self, text: str) -> Optional[bytes]:
+        """
+        Convert text to speech synchronously (wait=true).
+        Returns audio immediately without polling.
+        
+        Args:
+            text: The text to convert to speech
+            
+        Returns:
+            MP3 audio bytes, or None if failed
+        """
+        if not self.is_configured():
+            logger.error("TTS client not properly configured. Missing TTS_API_KEY.")
+            return None
+        
+        if not text or not text.strip():
+            logger.warning("Empty text provided to TTS, skipping")
+            return None
+        
+        try:
+            url = f"{self.base_url}/v2/speech/tts?as_signed_url=true"
+            
+            headers = {
+                "X-API-Key": self.api_key,
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "config": {
+                    "model": self.model,
+                    "wait": True,
+                    "pitch": 0,
+                    "tempo": 1,
+                    "audio_format": self.audio_format,
+                    "sample_rate": self.sample_rate
+                },
+                "request": {
+                    "label": "Audio Result",
+                    "text": text
+                }
+            }
+            
+            logger.info("Submitting synchronous TTS job for text: %s...", text[:50])
+            
+            # Longer timeout for synchronous requests
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            # With wait=true, audio URL should be in result immediately
+            audio_path = result.get("result", {}).get("path")
+            if not audio_path:
+                logger.error("No audio path in synchronous TTS response: %s", result)
+                return None
+            
+            # Download audio
+            audio_bytes = self._download_audio(audio_path)
+            return audio_bytes
+            
+        except requests.exceptions.RequestException as e:
+            logger.error("Failed to synthesize speech synchronously: %s", e)
+            return None
+        except Exception as e:
+            logger.error("Unexpected error in synchronous TTS: %s", e)
             return None
     
     def _submit_tts_job(self, text: str) -> Optional[str]:
