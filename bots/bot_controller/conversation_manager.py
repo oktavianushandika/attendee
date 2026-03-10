@@ -250,47 +250,27 @@ class ConversationManager:
             self.is_processing = True
         
         try:
-            # TODO: Re-enable LLM integration once parsing is fixed
-            # For now, skip LLM and pass query directly to TTS for testing
-            
-            # Step 1: Get LLM response (TEMPORARILY DISABLED)
-            logger.info(f"Sending query to LLM: {query}")
-            llm_response = self.llm_client.get_response(query)
-            
-            if not llm_response:
-                logger.error("Failed to get LLM response")
-                return
-            
-            logger.info(f"LLM response: {llm_response[:100]}...")
-            
-            # TEMPORARY: Use query directly as the text to speak
-            # logger.info("TEMPORARY MODE: Skipping LLM, using query directly for TTS")
-            # logger.info(f"Query to speak: {query}")
-            # text_to_speak = "Lorem Ipsum adalah contoh teks atau dummy dalam industri percetakan dan penataan huruf atau typesetting. Lorem Ipsum telah menjadi standar contoh teks sejak tahun 1500an, saat seorang tukang cetak yang tidak dikenal mengambil sebuah kumpulan teks dan mengacaknya untuk menjadi sebuah buku contoh huruf."
-            
-            # Step 2: Split text into sentences
-            logger.info("Splitting response into sentences...")
-            sentences = self.tts_client.split_into_sentences(llm_response)
-            logger.info("Split into %d sentences", len(sentences))
-            
-            # Step 3: Process and play each sentence
-            for i, sentence in enumerate(sentences, 1):
-                logger.info("Processing sentence %d/%d: %s...", i, len(sentences), sentence[:50])
-                
-                # Convert sentence to speech (synchronous)
+            logger.info("Sending query to LLM (streaming): %s", query)
+
+            sentence_count = 0
+            for i, sentence in enumerate(self.llm_client.stream_sentences(query), 1):
+                logger.info("Received sentence %d from LLM stream: %s...", i, sentence[:60])
+
                 audio_bytes = self.tts_client.synthesize_speech_sync(sentence)
-                
+
                 if not audio_bytes:
                     logger.error("Failed to synthesize sentence %d, skipping", i)
                     continue
-                
-                logger.info("Sentence %d synthesized, size: %d bytes", i, len(audio_bytes))
-                
-                # Play audio immediately
-                logger.info("Playing sentence %d audio...", i)
+
+                logger.info("Sentence %d synthesized (%d bytes), playing...", i, len(audio_bytes))
                 self.play_audio_callback(audio_bytes)
-            
-            logger.info("Conversation response completed successfully - played %d sentences", len(sentences))
+                sentence_count += 1
+
+            if sentence_count == 0:
+                logger.error("LLM stream produced no sentences")
+                return
+
+            logger.info("Conversation response completed - played %d sentences", sentence_count)
             
         except Exception as e:
             logger.error(f"Error processing conversation query: {e}", exc_info=True)

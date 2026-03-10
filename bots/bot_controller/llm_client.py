@@ -1,7 +1,8 @@
 import json
 import logging
 import os
-from typing import Optional
+import re
+from typing import Generator, Optional
 
 import requests
 
@@ -100,6 +101,105 @@ class LLMClient:
             logger.error(f"Unexpected error in LLM client: {e}")
             return None
     
+    def stream_sentences(self, query: str) -> Generator[str, None, None]:
+        """
+        Generator that yields complete sentences from the LLM SSE stream as they arrive.
+
+        Sentences are detected at `.`, `?`, and `!` boundaries so TTS can start
+        processing sentence N while the LLM is still generating sentence N+1.
+
+        The SSE API sends cumulative growing text in each `status=response` chunk
+        (the last chunk carries the full response). We compute the delta on each
+        chunk and buffer it until a sentence boundary is found.
+        """
+        if not self.is_configured():
+            logger.error("LLM client not properly configured. Missing environment variables.")
+            return
+
+        sentence_end_pattern = re.compile(r'([^.?!]*[.?!])\s*')
+
+        try:
+            form_data = {
+                "chatbot_id": self.chatbot_id,
+                "message": query,
+                "conversation_id": self.agent_id,
+                "model_name": "GPT 5 Mini"
+            }
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+
+            response = requests.post(
+                f"{self.base_url}/message/",
+                data=form_data,
+                headers=headers,
+                stream=True,
+                timeout=self.timeout
+            )
+            response.raise_for_status()
+
+            last_seen_text = ""
+            buffer = ""
+
+            for raw_line in response.iter_lines():
+                if not raw_line:
+                    continue
+
+                if isinstance(raw_line, bytes):
+                    line = raw_line.decode("utf-8")
+                else:
+                    line = raw_line
+
+                if not line.startswith("data:"):
+                    continue
+
+                json_str = line[5:].strip()
+                try:
+                    data = json.loads(json_str)
+                except json.JSONDecodeError:
+                    continue
+
+                if data.get("status") != "response" or not data.get("message"):
+                    continue
+
+                current_text = data["message"]
+
+                # Compute delta: if the API sends cumulative text, only the new
+                # suffix is new content; if it sends pure deltas, the delta is
+                # the entire current_text.
+                if current_text.startswith(last_seen_text):
+                    delta = current_text[len(last_seen_text):]
+                else:
+                    delta = current_text
+
+                last_seen_text = current_text
+                buffer += delta
+
+                # Yield complete sentences from the buffer
+                while True:
+                    match = sentence_end_pattern.match(buffer)
+                    if not match:
+                        break
+                    sentence = match.group(1).strip()
+                    if sentence:
+                        logger.info("Streaming sentence to TTS: %s...", sentence[:60])
+                        yield sentence
+                    buffer = buffer[match.end():]
+
+            # Yield any remaining text after the stream ends
+            remaining = buffer.strip()
+            if remaining:
+                logger.info("Streaming final sentence to TTS: %s...", remaining[:60])
+                yield remaining
+
+        except requests.exceptions.Timeout:
+            logger.error("LLM stream request timed out after %d seconds", self.timeout)
+        except requests.exceptions.RequestException as e:
+            logger.error("LLM stream request failed: %s", e)
+        except Exception as e:
+            logger.error("Unexpected error in LLM stream_sentences: %s", e, exc_info=True)
+
     def _extract_latest_response_message(self, sse_data: str) -> Optional[str]:
         """
         Extract the latest response message from SSE data string.
