@@ -1057,7 +1057,7 @@ class ZoomBotAdapter(BotAdapter):
         if status == zoom.MEETING_STATUS_FAILED:
             # This is a hacky way to determine if the bot failed to join because the onbehalf token user is not in the meeting.
             # On our current version of the Zoom SDK, there is no specific error code for this.
-            failed_because_onbehalf_token_user_not_in_meeting = iResult == 65535 and self.zoom_tokens.get("onbehalf_token")
+            failed_because_onbehalf_token_user_not_in_meeting = iResult == zoom.MEETING_FAIL_AUTHORIZED_USER_NOT_INMEETING and self.zoom_tokens.get("onbehalf_token")
 
             # Since the unable to join external meeting issue is so common, we'll handle it separately
             if iResult == zoom.MeetingFailCode.MEETING_FAIL_UNABLE_TO_JOIN_EXTERNAL_MEETING:
@@ -1065,6 +1065,12 @@ class ZoomBotAdapter(BotAdapter):
                     {
                         "message": self.Messages.ZOOM_MEETING_STATUS_FAILED_UNABLE_TO_JOIN_EXTERNAL_MEETING,
                         "zoom_result_code": iResult,
+                    }
+                )
+            elif iResult == zoom.MeetingFailCode.MEETING_FAIL_ENFORCE_LOGIN:
+                self.send_message_callback(
+                    {
+                        "message": self.Messages.LOGIN_REQUIRED,
                     }
                 )
             elif failed_because_onbehalf_token_user_not_in_meeting:
